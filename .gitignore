@@ -1,7 +1,9 @@
 venv/
 __pycache__/
 *.pyc
+*.pyo
 db.sqlite3
+*.sqlite3
 models/saved/*.pkl
 models/saved/*.keras
 models/saved/*.npy
@@ -10,3 +12,5 @@ data/raw/*.csv
 data/raw/*.parquet
 .env
 *.log
+.DS_Store
+notebooks/.ipynb_checkpoints/
