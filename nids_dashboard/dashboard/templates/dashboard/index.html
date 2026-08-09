@@ -2,104 +2,176 @@
 {% load static %}
 {% block title %}Dashboard{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
-{% block page_title_sub %}Overview{% endblock %}
+{% block page_sub %}Overview{% endblock %}
 
 {% block content %}
 
-<!-- KPI CARDS -->
+<!-- Feature 5: Statistics Cards (no emojis) -->
 <div class="kpi-grid">
   <div class="kpi-card">
-    <div class="kpi-icon">&#127760;</div>
-    <div class="kpi-label">Total Connections Captured</div>
-    <div class="kpi-value">{{ total_connections }}</div>
-    <div class="kpi-foot">across all analysis runs</div>
+    <div class="kpi-label">Total Connections</div>
+    <div class="kpi-value" id="stat-total">{{ total_connections }}</div>
+    <div class="kpi-foot">upload + live combined</div>
   </div>
   <div class="kpi-card kpi-card--threat">
-    <div class="kpi-icon">&#9888;</div>
     <div class="kpi-label">Active Threats</div>
-    <div class="kpi-value">{{ active_threats }}</div>
-    <div class="kpi-foot"><a href="{% url 'dashboard:alerts' %}">view alerts &rarr;</a></div>
+    <div class="kpi-value" id="stat-alerts">{{ active_threats }}</div>
+    <div class="kpi-foot"><a href="{% url 'dashboard:alerts' %}">view alerts</a></div>
   </div>
   <div class="kpi-card kpi-card--good">
-    <div class="kpi-icon">&#129302;</div>
     <div class="kpi-label">Accuracy Score (AI Model)</div>
     <div class="kpi-value">{{ accuracy_pct }}</div>
-    <div class="kpi-foot">{{ accuracy_model_name|default:"Upload CSV to analyse" }}</div>
+    <div class="kpi-foot">{{ accuracy_model_name|default:"run seed_metrics first" }}</div>
   </div>
-  <div class="kpi-card">
-    <div class="kpi-icon">&#128301;</div>
-    <div class="kpi-label">System Health</div>
-    <div class="kpi-value" style="font-size:20px;margin-top:6px">{{ system_health }}</div>
-    <div class="kpi-foot">RF: {% if models_loaded %}&#10003; loaded{% else %}&#10007; missing{% endif %} &middot; AE: {% if autoencoder_loaded %}&#10003; loaded{% else %}&#10007; missing{% endif %}</div>
+  <div class="kpi-card kpi-card--speed">
+    <div class="kpi-label">Processing Speed</div>
+    <div class="kpi-value"><span id="speed-ms">{{ avg_processing_ms }}</span> ms</div>
+    <div class="kpi-foot"><span id="throughput">—</span> records/sec</div>
   </div>
 </div>
 
-<!-- TRAFFIC + DISTRIBUTION -->
+<!-- Traffic + Distribution -->
 <div class="chart-grid-main">
   <div class="panel">
     <div class="panel-header">
       <h2>Network Traffic Overview</h2>
-      <span class="panel-sub">last 24 hours &mdash; benign vs malicious</span>
+      <span class="panel-sub">last 24 hours — benign vs malicious</span>
     </div>
     <div class="chart-wrap chart-wrap--lg"><canvas id="trafficChart"></canvas></div>
   </div>
   <div class="panel">
     <div class="panel-header">
       <h2>Attack Distribution</h2>
-      <span class="panel-sub">verdict breakdown</span>
+      <span class="panel-sub">all traffic combined</span>
     </div>
     <div class="chart-wrap chart-wrap--lg"><canvas id="distributionChart"></canvas></div>
   </div>
 </div>
 
-<!-- ALGORITHM COMPARISON (full width, tall) -->
+<!-- Algorithm Comparison — full width, side-by-side grouped bars -->
 <div class="panel">
   <div class="panel-header">
     <h2>Algorithm Accuracy Comparison</h2>
-    <span class="panel-sub">real offline evaluation metrics &mdash; all trained models</span>
+    <span class="panel-sub">real offline evaluation — Accuracy, Precision and Recall side-by-side per model</span>
   </div>
-  <div class="chart-wrap" style="height:300px"><canvas id="comparisonChart"></canvas></div>
+  <div class="chart-wrap" style="height:320px"><canvas id="comparisonChart"></canvas></div>
 </div>
 
-<!-- CVE THREAT INTELLIGENCE -->
-<div class="panel">
-  <div class="panel-header">
-    <h2>&#128272; Threat Intelligence &mdash; CVE Reference</h2>
-    <span class="panel-sub">common vulnerabilities relevant to detected attack patterns</span>
+<!-- Detection Summary + Recent Alerts side by side -->
+<div class="chart-grid-sub">
+
+  <!-- Feature 4: Detection Summary -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Detection Summary</h2>
+      <span class="panel-sub">upload vs live detections</span>
+    </div>
+    <div class="chart-wrap"><canvas id="summaryChart"></canvas></div>
+    <!-- Feature 6: Severity Colours breakdown -->
+    <div id="severityBreakdown" style="margin-top:14px;font-size:12px;display:flex;gap:14px;flex-wrap:wrap"></div>
   </div>
-  <div class="cve-grid" id="cveGrid">
-    <div class="cve-card">
-      <div class="kpi-label" style="text-align:center;padding:20px">Loading threat intelligence...</div>
+
+  <!-- Feature 2: Recent Alerts Table -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Recent Alerts</h2>
+      <a href="{% url 'dashboard:alerts' %}" class="panel-link">all alerts</a>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>Time</th><th>Source IP</th><th>Verdict</th><th>Sev.</th></tr>
+        </thead>
+        <tbody>
+          {% for a in live_recent %}
+          <tr class="sev-{{ a.severity|lower }}">
+            <td class="mono">{{ a.timestamp|date:"H:i:s" }}</td>
+            <td class="mono">{{ a.source_ip }}</td>
+            <td>{{ a.get_verdict_display }}</td>
+            <td><span class="badge badge-{{ a.severity|lower }}">{{ a.severity }}</span></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="empty-row">No live data yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
 </div>
 
-<!-- RECENT ACTIVITY -->
+<!-- Feature 1: Live Detection Panel + Feature 3: Processing Speed + Feature 7: Decision Explanation -->
 <div class="panel">
   <div class="panel-header">
-    <h2>Recent Activity</h2>
-    <a href="{% url 'dashboard:reports' %}" class="panel-link">full reports &rarr;</a>
+    <div style="display:flex;align-items:center;gap:12px">
+      <h2>Live Detection Panel</h2>
+      <span class="live-badge"><span class="live-dot"></span>LIVE</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px">
+      <!-- Feature 3: Processing Speed inline -->
+      <div style="text-align:right">
+        <div style="font-family:var(--font-mono);font-size:13px;color:var(--brand)"><span id="speed-us">—</span> us/record</div>
+        <div style="font-size:11px;color:var(--text-muted)">processing speed</div>
+      </div>
+      <button id="liveToggle" class="btn btn-secondary" style="padding:6px 14px;font-size:12px" onclick="toggleLive()">Pause</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Source IP</th>
+          <th>Dest IP</th>
+          <th>Protocol</th>
+          <th>Verdict</th>
+          <!-- Feature 6: Severity column with colour coding -->
+          <th>Severity</th>
+          <th>RF Conf.</th>
+          <th>Recon. Error</th>
+          <!-- Feature 7: Decision Explanation toggle -->
+          <th>Explanation</th>
+        </tr>
+      </thead>
+      <tbody id="liveTableBody">
+        <tr><td colspan="9" class="empty-row">Starting live detection feed...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- CVE Threat Intelligence -->
+<div class="panel">
+  <div class="panel-header">
+    <h2>Threat Intelligence — CVE Reference</h2>
+    <span class="panel-sub">common vulnerabilities linked to detected attack patterns</span>
+  </div>
+  <div class="cve-grid" id="cveGrid">
+    <div class="cve-card"><div class="empty-row">Loading...</div></div>
+  </div>
+</div>
+
+<!-- Upload-based Recent Activity -->
+<div class="panel">
+  <div class="panel-header">
+    <h2>Upload Analysis — Recent Activity</h2>
+    <a href="{% url 'dashboard:reports' %}" class="panel-link">full reports</a>
   </div>
   <div class="table-wrap">
     <table class="data-table" id="activityTable">
       <thead>
-        <tr>
-          <th>Timestamp</th><th>Source IP</th><th>Destination IP</th>
-          <th>Verdict</th><th>Severity</th><th>RF Confidence</th>
-        </tr>
+        <tr><th>Timestamp</th><th>Source IP</th><th>Verdict</th><th>Severity</th><th>Confidence</th></tr>
       </thead>
       <tbody>
         {% for d in recent_detections %}
         <tr class="sev-{{ d.severity|lower }}">
           <td class="mono">{{ d.timestamp|date:"Y-m-d H:i:s" }}</td>
           <td class="mono">{{ d.source_ip }}</td>
-          <td class="mono">{{ d.destination_ip }}</td>
           <td>{{ d.get_verdict_display }}</td>
           <td><span class="badge badge-{{ d.severity|lower }}">{{ d.severity }}</span></td>
           <td class="mono">{{ d.rf_confidence|floatformat:1 }}%</td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="empty-row">No traffic analysed yet &mdash; upload a CSV to get started.</td></tr>
+        <tr><td colspan="5" class="empty-row">Upload a CSV to see detections here.</td></tr>
         {% endfor %}
       </tbody>
     </table>

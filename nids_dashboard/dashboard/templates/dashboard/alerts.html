@@ -1,41 +1,191 @@
 {% extends "dashboard/base.html" %}
 {% block title %}Alerts{% endblock %}
 {% block page_title %}Alert Management{% endblock %}
+{% block page_sub %}Security Incidents{% endblock %}
 
 {% block content %}
-<section class="filter-bar">
-  <a href="?status=ACTIVE" class="chip {% if status_filter == 'ACTIVE' %}chip-active{% endif %}">Active</a>
-  <a href="?status=ACKNOWLEDGED" class="chip {% if status_filter == 'ACKNOWLEDGED' %}chip-active{% endif %}">Acknowledged</a>
-  <a href="?status=RESOLVED" class="chip {% if status_filter == 'RESOLVED' %}chip-active{% endif %}">Resolved</a>
-  <a href="?status=ALL" class="chip {% if status_filter == 'ALL' %}chip-active{% endif %}">All</a>
-</section>
 
-<section class="panel">
-  <table class="data-table">
-    <thead><tr><th>Time</th><th>Source IP</th><th>Verdict</th><th>Severity</th><th>Status</th><th>Actions</th></tr></thead>
+<!-- Filter Bar -->
+<div class="filter-bar">
+  <a href="?status=ACTIVE"       class="chip {% if status_filter == 'ACTIVE' %}chip-active{% endif %}">Active</a>
+  <a href="?status=ACKNOWLEDGED" class="chip {% if status_filter == 'ACKNOWLEDGED' %}chip-active{% endif %}">Acknowledged</a>
+  <a href="?status=RESOLVED"     class="chip {% if status_filter == 'RESOLVED' %}chip-active{% endif %}">Resolved</a>
+  <a href="?status=ALL"          class="chip {% if status_filter == 'ALL' %}chip-active{% endif %}">All</a>
+</div>
+
+<!-- Alerts Table — Let's Defend style -->
+<div class="panel" style="padding:0;overflow:hidden">
+  <table class="data-table" style="margin:0">
+    <thead>
+      <tr style="background:var(--surface-2)">
+        <th style="padding:14px 18px">Severity</th>
+        <th>Timestamp</th>
+        <th>Source IP</th>
+        <th>Destination IP</th>
+        <th>Attack Type</th>
+        <th>Status</th>
+        <th>RF Confidence</th>
+        <th style="text-align:center">Actions</th>
+      </tr>
+    </thead>
     <tbody>
       {% for a in alerts %}
-      <tr class="sev-{{ a.detection.severity|lower }}">
+      <!-- Main alert row -->
+      <tr class="sev-{{ a.detection.severity|lower }} alert-row"
+          id="alert-row-{{ a.id }}"
+          style="cursor:pointer"
+          onclick="toggleDetail({{ a.id }})">
+        <td style="padding:13px 18px">
+          <span class="badge badge-{{ a.detection.severity|lower }}">{{ a.detection.severity }}</span>
+        </td>
         <td class="mono">{{ a.created_at|date:"Y-m-d H:i:s" }}</td>
-        <td class="mono">{{ a.detection.source_ip }}</td>
-        <td>{{ a.detection.get_verdict_display }}</td>
-        <td><span class="badge badge-{{ a.detection.severity|lower }}">{{ a.detection.severity }}</span></td>
-        <td><span class="badge badge-status-{{ a.status|lower }}">{{ a.status }}</span></td>
-        <td class="row-actions">
-          {% if a.status == "ACTIVE" %}
-          <form method="post" action="{% url 'dashboard:acknowledge_alert' a.id %}">{% csrf_token %}<button class="btn-link">acknowledge</button></form>
-          <form method="post" action="{% url 'dashboard:resolve_alert' a.id %}">{% csrf_token %}<button class="btn-link">resolve</button></form>
-          {% elif a.status == "ACKNOWLEDGED" %}
-          <form method="post" action="{% url 'dashboard:resolve_alert' a.id %}">{% csrf_token %}<button class="btn-link">resolve</button></form>
-          {% else %}
-          <span class="muted">handled by {{ a.handled_by|default:"—" }}</span>
-          {% endif %}
+        <td class="mono" style="font-weight:600;color:var(--text)">{{ a.detection.source_ip }}</td>
+        <td class="mono">{{ a.detection.destination_ip }}</td>
+        <td>
+          <span class="verdict-label verdict-{{ a.detection.verdict|lower }}">
+            {{ a.detection.get_verdict_display }}
+          </span>
+        </td>
+        <td>
+          <span class="badge badge-status-{{ a.status|lower }}">{{ a.status }}</span>
+        </td>
+        <td class="mono">{{ a.detection.rf_confidence|floatformat:1 }}%</td>
+        <td style="text-align:center">
+          <span style="font-size:11px;color:var(--text-muted)">click to expand</span>
+        </td>
+      </tr>
+
+      <!-- Expandable detail row -->
+      <tr id="detail-{{ a.id }}" style="display:none;background:var(--surface-2)">
+        <td colspan="8" style="padding:0">
+          <div style="padding:20px 24px;border-top:1px solid var(--border);border-bottom:2px solid var(--border-{{ a.detection.severity|lower }},var(--border))">
+
+            <!-- Detail grid -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-bottom:18px">
+
+              <!-- Connection Info -->
+              <div class="detail-card">
+                <div class="detail-card-title">Connection Details</div>
+                <div class="detail-row"><span class="detail-key">Source IP</span><span class="detail-val mono">{{ a.detection.source_ip }}</span></div>
+                <div class="detail-row"><span class="detail-key">Source Port</span><span class="detail-val mono">{{ a.detection.source_port }}</span></div>
+                <div class="detail-row"><span class="detail-key">Destination IP</span><span class="detail-val mono">{{ a.detection.destination_ip }}</span></div>
+                <div class="detail-row"><span class="detail-key">Destination Port</span><span class="detail-val mono">{{ a.detection.destination_port }}</span></div>
+              </div>
+
+              <!-- Model Analysis -->
+              <div class="detail-card">
+                <div class="detail-card-title">AI Model Analysis</div>
+                <div class="detail-row"><span class="detail-key">RF Prediction</span><span class="detail-val">{% if a.detection.rf_prediction == 1 %}<span style="color:var(--critical)">MALICIOUS</span>{% else %}<span style="color:var(--low)">BENIGN</span>{% endif %}</span></div>
+                <div class="detail-row"><span class="detail-key">RF Confidence</span><span class="detail-val mono">{{ a.detection.rf_confidence|floatformat:3 }}</span></div>
+                <div class="detail-row"><span class="detail-key">Recon. Error</span><span class="detail-val mono">{{ a.detection.reconstruction_error|floatformat:4 }}</span></div>
+                <div class="detail-row"><span class="detail-key">AE Threshold</span><span class="detail-val mono">{{ a.detection.anomaly_threshold|floatformat:4 }}</span></div>
+                <div class="detail-row"><span class="detail-key">Is Anomaly</span><span class="detail-val">{% if a.detection.is_anomaly %}<span style="color:var(--critical)">YES</span>{% else %}<span style="color:var(--low)">NO</span>{% endif %}</span></div>
+              </div>
+
+              <!-- Incident Status -->
+              <div class="detail-card">
+                <div class="detail-card-title">Incident Status</div>
+                <div class="detail-row"><span class="detail-key">Alert ID</span><span class="detail-val mono">#{{ a.id }}</span></div>
+                <div class="detail-row"><span class="detail-key">Status</span><span class="detail-val"><span class="badge badge-status-{{ a.status|lower }}">{{ a.status }}</span></span></div>
+                <div class="detail-row"><span class="detail-key">Created</span><span class="detail-val mono">{{ a.created_at|date:"Y-m-d H:i" }}</span></div>
+                {% if a.handled_by %}<div class="detail-row"><span class="detail-key">Handled By</span><span class="detail-val">{{ a.handled_by }}</span></div>{% endif %}
+                {% if a.handled_at %}<div class="detail-row"><span class="detail-key">Handled At</span><span class="detail-val mono">{{ a.handled_at|date:"Y-m-d H:i" }}</span></div>{% endif %}
+              </div>
+            </div>
+
+            <!-- Action Buttons — block/unblock + acknowledge/resolve -->
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+
+              <!-- Block IP button -->
+              {% if is_admin %}
+              <form method="post" action="{% url 'dashboard:block_ip' %}" style="margin:0">
+                {% csrf_token %}
+                <input type="hidden" name="ip_address" value="{{ a.detection.source_ip }}">
+                <input type="hidden" name="reason" value="Alert #{{ a.id }} — {{ a.detection.get_verdict_display }}">
+                <button type="submit" class="btn btn-danger" style="padding:8px 16px;font-size:13px">
+                  Block {{ a.detection.source_ip }}
+                </button>
+              </form>
+              {% endif %}
+
+              <!-- Acknowledge -->
+              {% if a.status == "ACTIVE" %}
+              <form method="post" action="{% url 'dashboard:acknowledge_alert' a.id %}" style="margin:0">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-secondary" style="padding:8px 16px;font-size:13px">Acknowledge</button>
+              </form>
+              {% endif %}
+
+              <!-- Resolve -->
+              {% if a.status != "RESOLVED" %}
+              <form method="post" action="{% url 'dashboard:resolve_alert' a.id %}" style="margin:0">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-secondary" style="padding:8px 16px;font-size:13px">Resolve</button>
+              </form>
+              {% endif %}
+
+              <a href="{% url 'dashboard:access_control' %}" class="btn btn-secondary" style="padding:8px 16px;font-size:13px">
+                Manage Blocked IPs
+              </a>
+            </div>
+          </div>
         </td>
       </tr>
       {% empty %}
-      <tr><td colspan="6" class="empty-row">No alerts in this view.</td></tr>
+      <tr><td colspan="8" class="empty-row">No alerts in this view.</td></tr>
       {% endfor %}
     </tbody>
   </table>
-</section>
+</div>
+
+<style>
+.detail-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.detail-card-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  font-size: 12.5px;
+  border-bottom: 1px solid rgba(255,255,255,.03);
+}
+.detail-key { color: var(--text-muted); }
+.detail-val { font-weight: 500; }
+.verdict-label { font-size: 13px; font-weight: 600; }
+.verdict-confirmed_attack { color: var(--critical); }
+.verdict-known_attack { color: var(--high); }
+.verdict-zero_day { color: var(--medium); }
+.verdict-benign { color: var(--low); }
+.btn-danger {
+  background: var(--critical-bg);
+  color: var(--critical);
+  border: 1px solid var(--critical);
+  font-family: var(--font-body);
+}
+.btn-danger:hover { background: var(--critical); color: #fff; }
+.alert-row:hover td { background: var(--surface-3) !important; }
+</style>
+
+<script>
+function toggleDetail(id) {
+  const row = document.getElementById('detail-' + id);
+  if (row) {
+    row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+  }
+}
+</script>
 {% endblock %}

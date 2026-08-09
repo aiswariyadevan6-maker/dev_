@@ -1,0 +1,315 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+{% block title %}Performance{% endblock %}
+{% block page_title %}Model Performance{% endblock %}
+{% block page_sub %}Confusion Matrices & ROC Curves{% endblock %}
+
+{% block content %}
+
+<!-- Key Metrics Summary -->
+<div class="kpi-grid">
+  <div class="kpi-card kpi-card--good">
+    <div class="kpi-label">Random Forest AUC</div>
+    <div class="kpi-value" id="rf-auc">—</div>
+    <div class="kpi-foot">area under ROC curve</div>
+  </div>
+  <div class="kpi-card kpi-card--good">
+    <div class="kpi-label">Hybrid Model AUC</div>
+    <div class="kpi-value" id="hybrid-auc">—</div>
+    <div class="kpi-foot">RF + Autoencoder combined</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">RF True Positives</div>
+    <div class="kpi-value" id="rf-tp">—</div>
+    <div class="kpi-foot">correctly detected attacks</div>
+  </div>
+  <div class="kpi-card kpi-card--threat">
+    <div class="kpi-label">RF False Positives</div>
+    <div class="kpi-value" id="rf-fp">—</div>
+    <div class="kpi-foot">benign flagged as attack</div>
+  </div>
+</div>
+
+<!-- Confusion Matrices side by side -->
+<div class="chart-grid-sub">
+
+  <!-- RF Confusion Matrix -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Random Forest — Confusion Matrix</h2>
+      <span class="panel-sub">test set predictions</span>
+    </div>
+    <div class="cm-wrap" id="rf-cm-wrap">
+      <div class="cm-loading">Loading...</div>
+    </div>
+    <div class="cm-legend">
+      <div class="cm-legend-item"><span class="cm-dot" style="background:var(--low)"></span>True Positive / True Negative (correct)</div>
+      <div class="cm-legend-item"><span class="cm-dot" style="background:var(--critical)"></span>False Positive / False Negative (error)</div>
+    </div>
+  </div>
+
+  <!-- Hybrid Confusion Matrix -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Hybrid Model — Confusion Matrix</h2>
+      <span class="panel-sub">RF + Autoencoder combined</span>
+    </div>
+    <div class="cm-wrap" id="hybrid-cm-wrap">
+      <div class="cm-loading">Loading...</div>
+    </div>
+    <div class="cm-legend">
+      <div class="cm-legend-item"><span class="cm-dot" style="background:var(--low)"></span>True Positive / True Negative (correct)</div>
+      <div class="cm-legend-item"><span class="cm-dot" style="background:var(--critical)"></span>False Positive / False Negative (error)</div>
+    </div>
+  </div>
+</div>
+
+<!-- ROC Curves -->
+<div class="panel">
+  <div class="panel-header">
+    <h2>ROC Curves — Model Comparison</h2>
+    <span class="panel-sub">higher AUC = better discrimination between benign and malicious traffic</span>
+  </div>
+  <div class="chart-wrap" style="height:380px">
+    <canvas id="rocChart"></canvas>
+  </div>
+</div>
+
+<!-- Metrics Table -->
+<div class="panel">
+  <div class="panel-header">
+    <h2>Detailed Performance Metrics</h2>
+    <span class="panel-sub">computed on held-out test set (20% of dataset)</span>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table" id="metricsTable">
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th>TN</th><th>FP</th><th>FN</th><th>TP</th>
+          <th>Accuracy</th><th>Precision</th><th>Recall</th>
+          <th>FPR</th><th>FNR</th><th>AUC</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Random Forest</td>
+          <td id="rf-tn" class="mono">—</td>
+          <td id="rf-fp2" class="mono" style="color:var(--high)">—</td>
+          <td id="rf-fn" class="mono" style="color:var(--medium)">—</td>
+          <td id="rf-tp2" class="mono" style="color:var(--low)">—</td>
+          <td id="rf-acc" class="mono">—</td>
+          <td id="rf-prec" class="mono">—</td>
+          <td id="rf-rec" class="mono">—</td>
+          <td id="rf-fpr" class="mono">—</td>
+          <td id="rf-fnr" class="mono">—</td>
+          <td id="rf-auc2" class="mono" style="color:var(--brand)">—</td>
+        </tr>
+        <tr>
+          <td>Hybrid (RF+Autoencoder)</td>
+          <td id="hy-tn" class="mono">—</td>
+          <td id="hy-fp" class="mono" style="color:var(--high)">—</td>
+          <td id="hy-fn" class="mono" style="color:var(--medium)">—</td>
+          <td id="hy-tp" class="mono" style="color:var(--low)">—</td>
+          <td id="hy-acc" class="mono">—</td>
+          <td id="hy-prec" class="mono">—</td>
+          <td id="hy-rec" class="mono">—</td>
+          <td id="hy-fpr" class="mono">—</td>
+          <td id="hy-fnr" class="mono">—</td>
+          <td id="hy-auc" class="mono" style="color:var(--brand)">—</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+/* Confusion Matrix Grid */
+.cm-wrap {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  grid-template-rows: auto 1fr 1fr;
+  gap: 6px;
+  padding: 12px 0;
+}
+.cm-loading { color: var(--text-muted); padding: 24px; text-align: center; }
+.cm-axis-label {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--text-muted);
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  padding: 0 8px;
+}
+.cm-axis-label-h {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--text-muted);
+  padding: 6px;
+}
+.cm-cell {
+  border-radius: var(--radius);
+  padding: 20px 12px;
+  text-align: center;
+  min-height: 90px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 4px;
+}
+.cm-cell-label { font-size: 11px; color: rgba(255,255,255,.6); font-weight: 600; }
+.cm-cell-value { font-family: var(--font-mono); font-size: 22px; font-weight: 700; color: #fff; }
+.cm-cell-pct   { font-family: var(--font-mono); font-size: 12px; color: rgba(255,255,255,.7); }
+.cm-TP { background: rgba(16,185,129,.75); }
+.cm-TN { background: rgba(16,185,129,.55); }
+.cm-FP { background: rgba(239,68,68,.65); }
+.cm-FN { background: rgba(245,158,11,.65); }
+.cm-legend { display: flex; gap: 18px; margin-top: 12px; flex-wrap: wrap; }
+.cm-legend-item { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-muted); }
+.cm-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+</style>
+
+<script>
+let rocChart;
+
+function buildCM(wrapperId, cm) {
+  const wrap = document.getElementById(wrapperId);
+  if (!wrap) return;
+  const tn = cm[0][0], fp = cm[0][1], fn = cm[1][0], tp = cm[1][1];
+  const total = tn + fp + fn + tp;
+  const pct = v => ((v/total)*100).toFixed(1) + '%';
+  wrap.innerHTML = `
+    <div></div>
+    <div class="cm-axis-label-h">Predicted Benign</div>
+    <div class="cm-axis-label-h">Predicted Attack</div>
+    <div class="cm-axis-label">Actual Benign</div>
+    <div class="cm-cell cm-TN">
+      <div class="cm-cell-label">True Negative</div>
+      <div class="cm-cell-value">${tn.toLocaleString()}</div>
+      <div class="cm-cell-pct">${pct(tn)}</div>
+    </div>
+    <div class="cm-cell cm-FP">
+      <div class="cm-cell-label">False Positive</div>
+      <div class="cm-cell-value">${fp.toLocaleString()}</div>
+      <div class="cm-cell-pct">${pct(fp)}</div>
+    </div>
+    <div class="cm-axis-label">Actual Attack</div>
+    <div class="cm-cell cm-FN">
+      <div class="cm-cell-label">False Negative</div>
+      <div class="cm-cell-value">${fn.toLocaleString()}</div>
+      <div class="cm-cell-pct">${pct(fn)}</div>
+    </div>
+    <div class="cm-cell cm-TP">
+      <div class="cm-cell-label">True Positive</div>
+      <div class="cm-cell-value">${tp.toLocaleString()}</div>
+      <div class="cm-cell-pct">${pct(tp)}</div>
+    </div>`;
+}
+
+function set(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
+
+async function loadPerformance() {
+  try {
+    const d = await fetch('/dashboard/api/performance/', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    }).then(r => r.json());
+
+    // KPI cards
+    set('rf-auc',    d.rf_auc);
+    set('hybrid-auc',d.hybrid_auc);
+    set('rf-tp',     d.rf_cm[1][1].toLocaleString());
+    set('rf-fp',     d.rf_cm[0][1].toLocaleString());
+
+    // Confusion matrices
+    buildCM('rf-cm-wrap',     d.rf_cm);
+    buildCM('hybrid-cm-wrap', d.hybrid_cm);
+
+    // Metrics table
+    const rfCM  = d.rf_cm, hyCM = d.hybrid_cm;
+    const rfTot = rfCM[0][0]+rfCM[0][1]+rfCM[1][0]+rfCM[1][1];
+    const hyTot = hyCM[0][0]+hyCM[0][1]+hyCM[1][0]+hyCM[1][1];
+
+    const acc  = (cm, t) => (((cm[0][0]+cm[1][1])/t)*100).toFixed(2)+'%';
+    const prec = cm => ((cm[1][1]/(cm[1][1]+cm[0][1]))*100).toFixed(2)+'%';
+    const rec  = cm => ((cm[1][1]/(cm[1][1]+cm[1][0]))*100).toFixed(2)+'%';
+    const fpr  = cm => ((cm[0][1]/(cm[0][1]+cm[0][0]))*100).toFixed(2)+'%';
+    const fnr  = cm => ((cm[1][0]/(cm[1][0]+cm[1][1]))*100).toFixed(2)+'%';
+
+    set('rf-tn',   rfCM[0][0].toLocaleString());
+    set('rf-fp2',  rfCM[0][1].toLocaleString());
+    set('rf-fn',   rfCM[1][0].toLocaleString());
+    set('rf-tp2',  rfCM[1][1].toLocaleString());
+    set('rf-acc',  acc(rfCM, rfTot));
+    set('rf-prec', prec(rfCM));
+    set('rf-rec',  rec(rfCM));
+    set('rf-fpr',  fpr(rfCM));
+    set('rf-fnr',  fnr(rfCM));
+    set('rf-auc2', d.rf_auc);
+
+    set('hy-tn',   hyCM[0][0].toLocaleString());
+    set('hy-fp',   hyCM[0][1].toLocaleString());
+    set('hy-fn',   hyCM[1][0].toLocaleString());
+    set('hy-tp',   hyCM[1][1].toLocaleString());
+    set('hy-acc',  acc(hyCM, hyTot));
+    set('hy-prec', prec(hyCM));
+    set('hy-rec',  rec(hyCM));
+    set('hy-fpr',  fpr(hyCM));
+    set('hy-fnr',  fnr(hyCM));
+    set('hy-auc',  d.hybrid_auc);
+
+    // ROC curves
+    const ctx = document.getElementById('rocChart');
+    if (!ctx) return;
+    const cfg = {
+      type: 'line',
+      data: {
+        datasets: [
+          {
+            label: `Random Forest (AUC = ${d.rf_auc})`,
+            data: d.rf_fpr.map((x,i) => ({x, y: d.rf_tpr[i]})),
+            borderColor: '#00D4FF', backgroundColor: 'transparent',
+            borderWidth: 2.5, pointRadius: 0, tension: 0.1,
+          },
+          {
+            label: `Hybrid RF+AE (AUC = ${d.hybrid_auc})`,
+            data: d.hybrid_fpr.map((x,i) => ({x, y: d.hybrid_tpr[i]})),
+            borderColor: '#F97316', backgroundColor: 'transparent',
+            borderWidth: 2.5, pointRadius: 0, tension: 0.1,
+          },
+          {
+            label: 'Random Classifier (AUC = 0.5)',
+            data: [{x:0,y:0},{x:1,y:1}],
+            borderColor: '#7A8BA8', backgroundColor: 'transparent',
+            borderWidth: 1.5, borderDash: [6,4], pointRadius: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: {
+            type: 'linear', min: 0, max: 1,
+            title: { display: true, text: 'False Positive Rate (FPR)', color: '#7A8BA8', font: { size: 12 } },
+            grid: { color: '#1E2E4A' },
+          },
+          y: {
+            min: 0, max: 1,
+            title: { display: true, text: 'True Positive Rate (Recall)', color: '#7A8BA8', font: { size: 12 } },
+            grid: { color: '#1E2E4A' },
+          },
+        },
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 14, boxHeight: 14, padding: 18, font: { size: 12 } } },
+          tooltip: { callbacks: { label: c => ` FPR: ${c.parsed.x.toFixed(3)}, TPR: ${c.parsed.y.toFixed(3)}` } },
+        },
+      },
+    };
+    if (rocChart) { rocChart.data = cfg.data; rocChart.update(); }
+    else rocChart = new Chart(ctx, cfg);
+
+  } catch(e) {
+    console.error('Performance load error:', e);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadPerformance);
+</script>
+{% endblock %}

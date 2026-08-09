@@ -1,28 +1,12 @@
-# Virtual environment
 venv/
-
-# Trained model files (large binaries)
+__pycache__/
+*.pyc
+db.sqlite3
 models/saved/*.pkl
 models/saved/*.keras
 models/saved/*.npy
-
-# Raw dataset (large)
+models/saved/*.json
 data/raw/*.csv
 data/raw/*.parquet
-
-# Django
-db.sqlite3
-__pycache__/
-*.pyc
-*.pyo
-
-# Temp files
-_quarantine/
-*_backup/
-*.zip
-.DS_Store
-data/raw/*.csv
-models/saved/*.pkl
-models/saved/*.keras
-venv/
-__pycache__/
+.env
+*.log
