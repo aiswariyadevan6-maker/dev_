@@ -1,6 +1,8 @@
 # Zero Day Hunter — AI-Based Hybrid Network Intrusion Detection System
 
-Student: Aiswariya Akhil (E4318387) | Course: CIS4055 | Supervisor: Nauman Issar
+Student: Aiswariya Akhil (E4318387) 
+Course: CIS4055 
+Supervisor: Nauman Issar
 
 ## Overview
 Hybrid ML NIDS combining Random Forest (supervised, 99% accuracy)
